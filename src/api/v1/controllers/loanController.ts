@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { HTTP_STATUS } from "../../../constants/httpConstants";
- 
-// Implement later
-import { successResponse } from "../models/responseModel";
+import admin from "../../../../config/firebaseConfig";
+import { successResponse, errorResponse } from "../models/responseModel";
  
 /**
 * Manages requests and responses to create a new loan application
@@ -17,11 +16,22 @@ export const createLoan = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // In future steps, loan data will be saved to Firestore
+    const loanData = {
+      ...req.body,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+ 
+    const loanRef = await admin.firestore().collection("loans").add(loanData);
+ 
     res.status(HTTP_STATUS.CREATED).json(
-      successResponse({}, "Loan application created successfully")
+      successResponse({ id: loanRef.id }, "Loan application created successfully")
     );
   } catch (error: unknown) {
+    console.error("Firestore createLoan error:", error);
+    res
+      .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+      .json(errorResponse("An unexpected error occurred", "UNKNOWN_ERROR"));
     next(error);
   }
 };
@@ -40,11 +50,30 @@ export const reviewLoan = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    const db = admin.firestore();
+    const loanRef = db.collection("loans").doc(id);
+    const loanSnap = await loanRef.get();
+ 
+    if (!loanSnap.exists) {
+      res
+        .status(HTTP_STATUS.NOT_FOUND)
+        .json(errorResponse("Loan not found", "LOAN_NOT_FOUND"));
+      return;
+    }
+ 
+    await loanRef.update({
+      status: "reviewed",
+      reviewedAt: new Date().toISOString(),
+    });
  
     res.status(HTTP_STATUS.OK).json(
       successResponse({}, `Loan application ${id} reviewed successfully`)
     );
   } catch (error: unknown) {
+    console.error("Firestore reviewLoan error:", error);
+    res
+      .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+      .json(errorResponse("An unexpected error occurred", "UNKNOWN_ERROR"));
     next(error);
   }
 };
@@ -62,16 +91,17 @@ export const getAllLoans = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // For now, return mock data
-    const loans = [
-      { id: "L001", applicant: "John Doe", amount: 5000, status: "pending" },
-      { id: "L002", applicant: "Jane Smith", amount: 12000, status: "reviewed" },
-    ];
+    const snapshot = await admin.firestore().collection("loans").get();
+    const loans = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
  
     res.status(HTTP_STATUS.OK).json(
       successResponse(loans, "Loans successfully retrieved")
     );
   } catch (error: unknown) {
+    console.error("Firestore getAllLoans error:", error);
+    res
+      .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+      .json(errorResponse("An unexpected error occurred", "UNKNOWN_ERROR"));
     next(error);
   }
 };
@@ -90,11 +120,30 @@ export const approveLoan = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    const db = admin.firestore();
+    const loanRef = db.collection("loans").doc(id);
+    const loanSnap = await loanRef.get();
+ 
+    if (!loanSnap.exists) {
+      res
+        .status(HTTP_STATUS.NOT_FOUND)
+        .json(errorResponse("Loan not found", "LOAN_NOT_FOUND"));
+      return;
+    }
+ 
+    await loanRef.update({
+      status: "approved",
+      approvedAt: new Date().toISOString(),
+    });
  
     res.status(HTTP_STATUS.OK).json(
       successResponse({}, `Loan application ${id} approved successfully`)
     );
   } catch (error: unknown) {
+    console.error("Firestore approveLoan error:", error);
+    res
+      .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+      .json(errorResponse("An unexpected error occurred", "UNKNOWN_ERROR"));
     next(error);
   }
 };
